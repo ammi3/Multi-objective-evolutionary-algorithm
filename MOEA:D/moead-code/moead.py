@@ -75,6 +75,45 @@ class MOEAD:
         self.population = population
         return population
 
+    def fast_nondominated_sort(self, population):
+        population_size = len(population)
+        S = []   # 存储每个个体所支配的个体
+        n = np.zeros(shape=population_size)   # 存储每个个体的被支配数
+        fronts_idx = [[]]
+        for i in range(population_size):
+            S_p = []
+            n[i] = 0
+            for j in range(population_size):
+                if i == j:
+                    continue
+                if population[i].dominate(population[j]):
+                    S_p.append(j)
+                elif population[j].dominate(population[i]):
+                    n[i] += 1
+            S.append(S_p)
+            if n[i] == 0:
+                population[i].rank = 0
+                fronts_idx[0].append(i)
+
+        i = 0
+        while len(fronts_idx[i]) > 0:
+            Q = []
+            for p in fronts_idx[i]:
+                for q in S[p]:
+                    n[q] -= 1
+                    if n[q] == 0:
+                        population[q].rank = i + 1
+                        Q.append(q)
+            i += 1
+            fronts_idx.append(Q)
+        fronts_idx.pop()
+
+        fronts = []
+        for rank in fronts_idx:
+            rank_individuals = [population[idx] for idx in rank]
+            fronts.append(rank_individuals)
+        return fronts
+
     # 初始化参考点
     def init_reference_points(self):
         Z = np.full(shape=self.m, fill_value=float('inf'))
@@ -111,7 +150,7 @@ class MOEAD:
         # print("交叉后child2_genes:", child2_genes)
         child1 = self.generate_individual(child1_genes)
         child2 = self.generate_individual(child2_genes)
-        return child1, child2
+        return child1
 
     # 变异操作
     def mutation(self, individual, variables_range):
@@ -137,26 +176,25 @@ class MOEAD:
         return Z
 
     def update_EP(self, new_individual):
-        accept_new = True
-        for i in range(len(self.EP) - 1, -1, -1):
-            individual = self.EP[i]
-            new_dominate_old = True
-            old_dominate_new = True
-            for j in range(len(self.objective_functions)):
-                if individual.fitness[j] < new_individual.fitness[j]:
-                    new_dominate_old = False
-                if individual.fitness[j] > new_individual.fitness[j]:
-                    old_dominate_new = False
-            if old_dominate_new:
-                accept_new = False
-                break
-            if not old_dominate_new and new_dominate_old:
-                del self.EP[i]
-                continue
-        if accept_new:
+        if self.EP != []:
+            i = 0
+            while (i < len(self.EP)):
+                if (new_individual.dominate(self.EP[i])):
+                    del self.EP[i]
+                    i -= 1
+                i += 1
+            accept_new = True
+            for individual in self.EP:
+                if (individual.dominate(new_individual) or (individual.fitness == new_individual.fitness).all()):
+                    accept_new = False
+                    break
+            if accept_new:
+                self.EP.append(new_individual)
+        else:
             self.EP.append(new_individual)
 
         return self.EP
+
 
 
 
